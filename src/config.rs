@@ -21,10 +21,21 @@ use file_lines::FileLines;
 use lists::{ListTactic, SeparatorPlace, SeparatorTactic};
 use Summary;
 
-macro_rules! is_nightly_channel {
+/// Check if we're not in a build for stable.
+///
+/// The environment variable `CFG_RELEASE_CHANNEL` is set during the rustc bootstrap
+/// to "stable", "beta", or "nightly" depending on what toolchain is being built.
+/// If we are being built as part of the stable or beta toolchains, we want
+/// to disable unstable configuration options.
+///
+/// If we're being built by cargo (e.g. `cargo +nightly install rustfmt-nightly`),
+/// we do not want to disable the unstable options. They are still opt-in, but should
+/// be available when built with cargo -- it requires the nightly toolchain already.
+/// Cargo does not set `CFG_RELEASE_CHANNEL`.
+macro_rules! should_disable_unstable {
     () => {
         option_env!("CFG_RELEASE_CHANNEL")
-            .map(|c| c == "nightly")
+            .map(|c| c != "nightly")
             .unwrap_or(false)
     }
 }
@@ -357,12 +368,12 @@ macro_rules! create_config {
                         self.$i.1 = true;
                         self.$i.2 = val;
                     } else {
-                        if is_nightly_channel!() {
-                            self.$i.1 = true;
-                            self.$i.2 = val;
-                        } else {
+                        if should_disable_unstable!() {
                             eprintln!("Warning: can't set `{} = {:?}`, unstable features are only \
                                       available in nightly channel.", stringify!($i), val);
+                        } else {
+                            self.$i.1 = true;
+                            self.$i.2 = val;
                         }
                     }
                 }
